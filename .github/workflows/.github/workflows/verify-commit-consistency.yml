@@ -1,0 +1,49 @@
+name: Verify Commit Consistency (Diagnostic)
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read  # read-only; explicitly no write/publish scope
+
+jobs:
+  measure:
+    name: Measure commit consistency
+    if: github.event.review.state == 'approved'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Echo event-level data
+        run: |
+          echo "review.state         = ${{ github.event.review.state }}"
+          echo "review.commit_id     = ${{ github.event.review.commit_id }}"
+          echo "review.author_assoc  = ${{ github.event.review.author_association }}"
+
+      - name: Resolve PR head SHA (same logic as release workflow)
+        id: sha
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const { owner, repo, number } = context.issue
+            const pr = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: number,
+            })
+            return pr.data.head.sha
+
+      - name: Checkout resolved SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.sha.outputs.result }}
+          fetch-depth: 1
+
+      - name: Print single comparison block
+        run: |
+          echo "===== COMMIT_CONSISTENCY_REPORT ====="
+          echo "REVIEWED_SHA=${{ github.event.review.commit_id }}"
+          echo "RESOLVED_SHA=${{ steps.sha.outputs.result }}"
+          echo "CHECKED_OUT_SHA=$(git rev-parse HEAD)"
+          echo "====================================="
